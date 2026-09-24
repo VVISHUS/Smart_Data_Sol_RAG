@@ -32,7 +32,7 @@ python -m app.cli inspect                    # what the index contains
 python -m app.cli ask "..." --show-context   # see the exact text used
 python -m tests.test_storage                 # offline tests, no API key needed
 python -m eval.run_eval                      # the 20-question evaluation
-streamlit run app/streamlit_app.py           # browser UI
+streamlit run streamlit_app.py               # browser UI
 ```
 
 ---
