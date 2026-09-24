@@ -35,6 +35,8 @@ demonstration.
 
 from __future__ import annotations
 
+import os
+
 import streamlit as st
 
 from utils.config import PROJECT_ROOT, load_config
@@ -42,6 +44,22 @@ from utils.elements import ElementKind
 from utils.pipeline import build_qa_chain
 
 st.set_page_config(page_title="10-Q RAG", page_icon="📄", layout="wide")
+
+
+# WHY BRIDGE st.secrets INTO THE ENVIRONMENT
+# On Streamlit Cloud the API key is supplied through the app's Secrets settings,
+# while every other entry point in this project (the CLI, the eval harness)
+# reads credentials from environment variables. Copying them across once at
+# startup keeps a single credential path instead of putting a Streamlit-specific
+# branch inside config.py, which the CLI would then carry for no reason.
+for _var in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "LLM_PROVIDER"):
+    try:
+        if _var in st.secrets and not os.getenv(_var):
+            os.environ[_var] = str(st.secrets[_var])
+    except Exception:
+        # WHY swallow: st.secrets raises if no secrets file exists at all, which
+        # is the normal case when running locally against a .env. Not an error.
+        break
 
 
 @st.cache_resource

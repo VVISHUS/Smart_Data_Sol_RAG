@@ -12,19 +12,31 @@ __pycache__/
 venv/
 env/
 
-# --- Generated artifacts -----------------------------------------------------
-# WHY: These are *derived* from data/raw/*.pdf by running the pipeline. Committing
-# them would bloat the repo and hide whether the pipeline actually reproduces.
-# The reviewer should be able to delete these, run one command, and get them back.
-data/processed/
-chroma_db/
-*.sqlite3
-# WHY the -wal and -shm siblings too: SQLite in WAL mode keeps a write-ahead log
-# and a shared-memory index next to the database. They are transient and
-# machine-local; committing them would be meaningless and occasionally corrupt.
+# --- The built index is COMMITTED, deliberately -------------------------------
+# chroma_db/ and data/processed/ hold output derived from data/raw/*.pdf, so the
+# instinct is to ignore them, and they were ignored at first.
+#
+# That was wrong for this repo. Building the index needs an API key and several
+# minutes of model calls. Anyone who clones this - a reviewer, or Streamlit Cloud
+# deploying it - gets a repo that cannot answer a single question until they
+# supply a key and wait. The deployed app failed with exactly that: "No vectors
+# in the index (docstore holds 0 rows)", because the index existed only on the
+# machine that built it.
+#
+# It is 2.8 MB. Committing it means a clone can query immediately, and the only
+# key needed is one for answering, not for rebuilding.
+#
+# The pipeline is still fully reproducible: delete both directories, run
+# `python -m app.cli ingest`, and they come back.
+
+# WHY the -wal and -shm siblings ARE still ignored: SQLite in WAL mode keeps a
+# write-ahead log and a shared-memory index beside the database. They are
+# transient and machine-local; committing them is meaningless and can corrupt.
 *.sqlite3-wal
 *.sqlite3-shm
-# The JSON export produced by `ingest --export-json` is derived, not source.
+
+# The JSON export produced by `ingest --export-json` is for reading by eye, and
+# duplicates what is already in the docstore.
 data/processed/docstore_export.json
 
 # NOTE: data/raw/apple_10q_2022_q3.pdf is deliberately COMMITTED, not ignored.
