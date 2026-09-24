@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Dependencies are pinned to minor versions (>=x.y,<x.y+1) rather than exact
+# pins. WHY: exact pins rot fast and break `pip install` for a reviewer on a
+# different platform; unpinned deps break reproducibility. This is the middle
+# ground -- reproducible enough to run, loose enough to install.
+# ---------------------------------------------------------------------------
+
+# --- PDF parsing -------------------------------------------------------------
+# WHY TWO LIBRARIES: they are good at different things and we use each for its
+# strength (see src/ingestion/pdf_parser.py for the full argument).
+#   pdfplumber -> best-in-class *table* detection; exposes ruling lines and
+#                 per-cell bounding boxes, which we need to excise tables from
+#                 the narrative text so content is not indexed twice.
+#   PyMuPDF    -> fastest text+image extraction, and the only one of the two
+#                 that cleanly yields embedded raster images for the figure path.
+pdfplumber>=0.11,<0.12
+PyMuPDF>=1.24,<1.26
+
+# --- LLM + embeddings --------------------------------------------------------
+# WHY Gemini: vision-capable (required for the figure-captioning path), and the
+# free tier comfortably covers a 28-page document. Swappable -- see src/llm/.
+langchain-google-genai>=2.0,<3.0
+langchain-openai>=0.2,<1.0          # optional fallback provider
+langchain-core>=0.3,<1.0
+langchain-community>=0.3,<1.0
+
+# --- Vector store ------------------------------------------------------------
+# WHY Chroma: runs in-process with zero infrastructure. A reviewer must be able
+# to `pip install && python -m app.cli` with no Docker daemon or DB server.
+chromadb>=0.5,<2.0
+
+# --- Image handling ----------------------------------------------------------
+Pillow>=10.0,<12.0
+
+# --- Config / plumbing -------------------------------------------------------
+pydantic>=2.0,<3.0                  # typed config; fails loudly on bad values
+pydantic-settings>=2.0,<3.0
+PyYAML>=6.0,<7.0
+python-dotenv>=1.0,<2.0
+tenacity>=8.0,<10.0                 # retry/backoff around flaky LLM calls
+
+# --- Interfaces --------------------------------------------------------------
+streamlit>=1.38,<2.0
+rich>=13.0,<15.0                    # readable CLI output + progress
+
+# --- Evaluation --------------------------------------------------------------
+pandas>=2.0,<3.0
+reportlab>=4.0,<5.0   # methodology PDF build (scripts/build_pdf.py)

@@ -1,0 +1,155 @@
+# ---------------------------------------------------------------------------
+# Evaluation set: 20 questions with ground truth taken directly from the filing.
+#
+# WHY THIS FILE IS THE MOST IMPORTANT ARTEFACT IN THE REPO
+# --------------------------------------------------------
+# Any RAG demo can be made to look good by asking it the three questions it
+# happens to answer well. A fixed, adversarial, written-down question set is the
+# only thing that distinguishes a system that works from one that demos.
+#
+# The brief asks for text, table AND figure retrieval, so coverage is explicit:
+# every question carries a `category`, and the harness reports accuracy per
+# category. That turns "it handles tables" from a claim into a measurement.
+#
+# CATEGORIES
+#   text        -- answerable from narrative prose
+#   table       -- a single value read from one table
+#   table_multi -- requires reading two periods/columns, or two tables
+#   figure      -- about images in the document
+#   refusal     -- NOT answerable from the document; the system must decline
+#
+# WHY THE `refusal` CATEGORY EXISTS: a system that never refuses is not accurate,
+# it is merely agreeable. These questions are plausible, on-topic, and genuinely
+# absent from a 10-Q. Silent fabrication here is the most dangerous failure mode
+# the system has, so it is measured directly.
+#
+# `expect` = strings that MUST appear in a correct answer (normalised: case and
+# thousands separators ignored). `forbid` = strings whose presence proves a
+# specific known failure.
+# ---------------------------------------------------------------------------
+
+- id: q01
+  category: table
+  question: What were Apple's total net sales for the three months ended June 25, 2022?
+  expect: ["82,959"]
+  # WHY forbid this: 304,182 is the NINE-MONTH figure from the adjacent column.
+  # It is the single most likely wrong answer and tests the period-column trap
+  # directly (see DECISIONS.md #7, #11).
+  forbid: ["304,182"]
+
+- id: q02
+  category: table
+  question: What were iPhone net sales in the third quarter of fiscal 2022?
+  expect: ["40,665"]
+  forbid: ["162,863"]
+
+- id: q03
+  category: table
+  question: How much did Apple spend on research and development in the quarter ended June 25, 2022?
+  expect: ["6,797"]
+  forbid: ["19,490"]
+
+- id: q04
+  category: table
+  question: What was Apple's net income for the three months ended June 25, 2022?
+  expect: ["19,442"]
+  forbid: ["79,082"]
+
+- id: q05
+  category: table
+  question: What were Apple's total assets as of June 25, 2022?
+  expect: ["336,309"]
+
+- id: q06
+  category: table
+  question: How much cash and cash equivalents did Apple hold as of June 25, 2022?
+  expect: ["27,502"]
+
+- id: q07
+  category: table
+  question: What was Apple's diluted earnings per share for the third quarter of 2022?
+  expect: ["1.20"]
+
+- id: q08
+  category: table
+  question: What were Services net sales in the three months ended June 25, 2022?
+  expect: ["19,604"]
+
+- id: q09
+  category: table
+  question: What was Apple's total gross margin percentage for the third quarter of 2022?
+  expect: ["43.3"]
+
+- id: q10
+  category: table
+  question: What were net sales in Greater China for the three months ended June 25, 2022?
+  expect: ["14,604"]
+
+- id: q11
+  category: table_multi
+  question: By what percentage did Mac net sales change in the third quarter of 2022 compared to the same quarter in 2021?
+  # WHY both are accepted: the filing prints "(10)%" in the change column, and a
+  # correct answer may render it as "-10" or describe it as a 10% decrease.
+  expect: ["10"]
+  forbid: ["increase"]
+
+- id: q12
+  category: table_multi
+  question: What was Apple's effective tax rate in the third quarter of 2022, and how did it compare to the same quarter of 2021?
+  expect: ["15.7", "10.8"]
+
+- id: q13
+  category: table_multi
+  question: Compare Americas and Europe net sales for the three months ended June 25, 2022.
+  expect: ["37,472", "19,287"]
+
+- id: q14
+  category: text
+  question: What did Apple say about the impact of the COVID-19 pandemic on its suppliers?
+  expect: ["supply"]
+
+- id: q15
+  category: text
+  question: What is the status of the Epic Games lawsuit against Apple?
+  expect: ["Epic"]
+
+- id: q16
+  category: text
+  question: Why did Japan's net sales decrease in the third quarter of 2022?
+  # The filing attributes it to lower iPhone and iPad sales plus yen weakness.
+  expect: ["yen"]
+
+- id: q17
+  category: text
+  question: What new products did Apple introduce at the end of the third quarter of 2022?
+  expect: ["MacBook Air"]
+
+- id: q18
+  category: figure
+  question: What charts or figures are included in this document?
+  # GROUND TRUTH: none. The filing contains exactly one embedded image -- a
+  # 46x56px Apple logo on page 1 -- and no analytical figures at all.
+  # A correct system reports that, rather than inventing a chart.
+  #
+  # WHY THIS ASSERTION WAS TIGHTENED: it originally read `expect: ["no"]`, which
+  # passed spuriously -- "no" is a substring of "not", so the generic refusal
+  # "the provided document excerpts do not contain this information" satisfied
+  # it. The test was green while the figure element was never retrieved at all.
+  # A test that passes for the wrong reason is worse than a failing one, because
+  # it actively hides the defect. Requiring the word "logo" can only be
+  # satisfied by actually reaching the captioned figure.
+  expect: ["logo"]
+  forbid: ["bar chart", "line graph", "pie chart"]
+
+- id: q19
+  category: refusal
+  question: How many iPhone units did Apple sell in the third quarter of 2022?
+  # Apple stopped disclosing unit sales in 2018. A 10-Q reports revenue, never
+  # units -- but the model's prior will happily invent a number.
+  expect: ["do not contain"]
+
+- id: q20
+  category: refusal
+  question: What is Apple's forecast for iPhone revenue in fiscal 2023?
+  # Apple does not issue guidance in its 10-Q.
+  expect: ["do not contain"]

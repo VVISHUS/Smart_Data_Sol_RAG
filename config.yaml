@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------------------
+# Central tuning surface for the whole pipeline.
+#
+# WHY A CONFIG FILE AT ALL: every number below is a decision that a reviewer
+# might disagree with. Burying them as literals across ten modules makes the
+# system look arbitrary and makes experiments (the actual job of an ML engineer)
+# require code edits. Hoisting them here means the *reasoning* lives in one
+# reviewable place and tuning never touches logic.
+# ---------------------------------------------------------------------------
+
+paths:
+  raw_pdf: data/raw/apple_10q_2022_q3.pdf
+  processed_dir: data/processed
+  figures_dir: data/processed/figures
+  vector_store_dir: chroma_db
+  docstore_path: data/processed/docstore.sqlite3
+
+llm:
+  provider: google                 # google | openai  (env LLM_PROVIDER wins)
+  # WHY flash-tier: summarisation and captioning are high-volume, low-difficulty
+  # calls. Paying frontier-model prices for "describe this table" is waste. The
+  # *answering* model is configured separately below because that task is the
+  # one the reviewer actually judges.
+  summarizer_model: gemini-3.5-flash-lite
+  answer_model: gemini-3.5-flash-lite
+  embedding_model: models/gemini-embedding-001
+  temperature: 0.0                 # WHY 0: factual retrieval over a financial
+                                   # filing. Any creativity here is a defect.
+  max_retries: 3
+  request_timeout_s: 60
+  # WHY PACE OUTBOUND CALLS: free-tier quota is a few requests per minute
+  # (measured: 5/min for gemini-3.6-flash). Enrichment makes ~31 calls in a row;
+  # unpaced, most return 429 and silently degrade to a fallback summary. The
+  # lite summariser model carries a higher quota, so 12/min is a safe pace.
+  requests_per_minute: 12
+  # Quota is per MODEL, not per key: the stronger answering model has a tighter
+  # cap (measured: 5/min). Kept separate so enrichment is not slowed to match.
+  answer_requests_per_minute: 10
+
+ingestion:
+  # WHY filter figures by size: a filing's embedded images are overwhelmingly
+  # logos, rules and signature glyphs. Anything under these bounds carries no
+  # answerable information and would pollute the index with noise while burning
+  # vision-model calls.
+  #
+  # WHY 40 AND NOT A MORE CONVENTIONAL 120: this was tuned against the actual
+  # document, not guessed. The filing contains exactly ONE embedded image -- the
+  # Apple logo on p.1, at 46x56px. A 120px floor rejects it, and the figure path
+  # then reports zero figures without ever executing.
+  #
+  # We deliberately set the floor BELOW that image so the figure pipeline runs
+  # end to end on this document and the vision model reports, in its own words,
+  # that the only image present is a logo. An honest captioned negative is a
+  # real result; a path that silently never ran is not evidence of anything.
+  # See docs/DECISIONS.md #2.
+  min_figure_width_px: 40
+  min_figure_height_px: 40
+  # WHY an aspect-ratio ceiling: horizontal rules and page borders pass the size
+  # filter (they are wide) but are pure decoration.
+  max_figure_aspect_ratio: 8.0
+
+  # WHY we drop tiny tables: pdfplumber reports 2-cell "tables" for things like
+  # the checkbox rows on the 10-Q cover page. They are not tabular data.
+  min_table_rows: 2
+  min_table_cols: 2
+
+# NOTE ON CHUNKING -- deliberately absent.
+# An earlier version of this file carried chunk_size / chunk_overlap settings.
+# Nothing ever read them: narrative text is indexed one element PER PAGE, not
+# split. They are removed rather than left in place, because configuration that
+# silently does nothing is worse than either alternative -- a reader tunes it,
+# observes no effect, and loses trust in the rest of the file.
+#
+# WHY PAGE-LEVEL GRANULARITY IS THE RIGHT DEFAULT HERE: a 10-Q page is already a
+# coherent topical unit (one page is typically one MD&A subsection), and page
+# granularity makes citations exact -- "[text on p.18]" points at something the
+# reader can actually turn to. Sub-page chunking is listed as a future
+# improvement in docs/METHODOLOGY.md, not as an oversight.
+
+retrieval:
+  # WHY 6: the answer model receives raw tables, which are token-heavy. Six
+  # elements keeps the prompt focused; more dilutes attention across irrelevant
+  # context and measurably increases wrong-number answers.
+  top_k: 6
+  # WHY a separate floor for tables: a numeric question must not be crowded out
+  # of the context window by narrative that merely mentions the same words.
+  #
+  # WHY 4 AND NOT 2 (measured, not guessed): at 2, evaluation scored 18/20. Both
+  # failures were FALSE REFUSALS -- diluted EPS and total gross margin percentage
+  # -- where narrative took all 6 primary slots and the 2 reserved slots went to
+  # tables that merely ranked highest, not the correct ones. A table-only search
+  # showed the correct table ranked #3 in BOTH cases. A floor of 4 covers that
+  # with margin. See docs/DECISIONS.md #19.
+  min_tables_in_context: 4

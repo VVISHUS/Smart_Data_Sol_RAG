@@ -1,0 +1,47 @@
+# --- Secrets -----------------------------------------------------------------
+# WHY: API keys must never reach GitHub. The reviewer will clone this repo;
+# a leaked key is both a security failure and an instant credibility loss.
+.env
+*.key
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# --- Generated artifacts -----------------------------------------------------
+# WHY: These are *derived* from data/raw/*.pdf by running the pipeline. Committing
+# them would bloat the repo and hide whether the pipeline actually reproduces.
+# The reviewer should be able to delete these, run one command, and get them back.
+data/processed/
+chroma_db/
+*.sqlite3
+# WHY the -wal and -shm siblings too: SQLite in WAL mode keeps a write-ahead log
+# and a shared-memory index next to the database. They are transient and
+# machine-local; committing them would be meaningless and occasionally corrupt.
+*.sqlite3-wal
+*.sqlite3-shm
+# The JSON export produced by `ingest --export-json` is derived, not source.
+data/processed/docstore_export.json
+
+# NOTE: data/raw/apple_10q_2022_q3.pdf is deliberately COMMITTED, not ignored.
+# It was excluded at first, on the reasoning that the source document is the
+# assignment's input rather than our work product. That was the wrong call: a
+# reviewer who clones this repo would then have nothing to run the pipeline
+# against, and "reproducible" that depends on the reader sourcing a file
+# elsewhere is not reproducible. It is a 266 KB public SEC filing, so there is
+# no size or licensing reason to leave it out.
+
+# --- Tooling -----------------------------------------------------------------
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store
+
+# --- run logs ----------------------------------------------------------------
+# WHY ignored but eval/results.md is NOT: these are raw stdout from a particular
+# run (timestamps, progress lines). eval/results.md is the distilled, reviewable
+# result and belongs in the repo as evidence.
+*.log
