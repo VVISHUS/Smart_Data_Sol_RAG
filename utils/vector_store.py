@@ -162,17 +162,40 @@ class MultiVectorStore:
         # and re-paying every embedding call - on every question.
         self._client = chromadb.PersistentClient(path=str(self._persist_dir))
 
-        # WHY cosine and not Chroma's default L2: our embeddings are not
-        # normalised to unit length, and with L2 a longer document's larger
-        # vector magnitude biases the distance independently of its meaning.
-        # Cosine compares direction only, which is what "semantic similarity"
-        # means for text embeddings.
-        self._collection = self._client.get_or_create_collection(
+        self._db = self._connect()
+
+    # -----------------------------------------------------------------------
+    @property
+    def _collection(self):
+        """
+        Fetch the collection on every access rather than holding a handle.
+
+        WHY THIS IS A PROPERTY AND NOT AN ATTRIBUTE SET IN __init__
+        A Chroma collection handle is bound to a specific collection UUID. When
+        another process rebuilds the index, `delete_collection` retires that
+        UUID, and every later call on the old handle raises
+        `NotFoundError: Collection [uuid] does not exist`.
+
+        That is not hypothetical. The Streamlit app caches this store for the
+        life of the server (`@st.cache_resource`), so a single
+        `ingest --rebuild` from a terminal left the running UI permanently
+        broken, reporting an empty index while the index was in fact fine. The
+        user has no way to connect those two events.
+
+        Re-fetching is a local SQLite lookup, so the cost is negligible next to
+        an embedding call, and it makes the store self-healing across external
+        rebuilds.
+
+        WHY cosine and not Chroma's default L2: our embeddings are not
+        normalised to unit length, and with L2 a longer document's larger
+        vector magnitude biases the distance independently of its meaning.
+        Cosine compares direction only, which is what "semantic similarity"
+        means for text embeddings.
+        """
+        return self._client.get_or_create_collection(
             name=_COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
         )
-
-        self._db = self._connect()
 
     # -----------------------------------------------------------------------
     # SQLite plumbing
@@ -243,9 +266,8 @@ class MultiVectorStore:
             # WHY tolerate failure: on a first run the collection does not
             # exist. That is not an error condition for a reset.
             pass
-        self._collection = self._client.get_or_create_collection(
-            name=_COLLECTION_NAME, metadata={"hnsw:space": "cosine"}
-        )
+        # No need to recreate it here: `_collection` is a property, so the next
+        # access creates it.
 
         # WHY DELETE and not DROP TABLE: keeping the table means the schema is
         # created in exactly one place (_connect), rather than in two that could
@@ -349,8 +371,14 @@ class MultiVectorStore:
         possible to see *how* confident a match was rather than guessing.
         """
         if self._collection.count() == 0:
+            # WHY the message distinguishes the two cases: "the index is empty"
+            # was actively misleading when the docstore held 59 rows and only
+            # the vector side had been cleared. Reporting both counts turns a
+            # dead end into a diagnosis.
             raise RuntimeError(
-                "The index is empty. Run `python -m app.cli ingest` first."
+                f"No vectors in the index (docstore holds {self.docstore_size} "
+                "rows). Run `python -m app.cli ingest` to build it, or "
+                "`--rebuild` if the two have drifted apart."
             )
 
         vector = self.provider.embed_query(query)

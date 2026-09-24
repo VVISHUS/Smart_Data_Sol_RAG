@@ -43,6 +43,11 @@ def _chain():
     `cache_resource` is the correct decorator for unserialisable, long-lived
     objects like DB connections and model clients; `cache_data` would try to
     pickle them and fail.
+
+    CAVEAT THIS CACHE INTRODUCES: it lives for the life of the server, so a
+    change made from outside (an `ingest --rebuild` in a terminal) is invisible
+    here until the cache is cleared. The store is now written to survive that on
+    its own, and the sidebar has a Reload button for whatever it cannot.
     """
     return build_qa_chain(load_config())
 
@@ -75,6 +80,14 @@ Every answer is grounded in retrieved excerpts, shown below it.
         "runs and reports their absence rather than inventing them."
     )
 
+    # WHY THIS BUTTON EXISTS: if the index is rebuilt from a terminal while this
+    # server is running, the cached store can be out of step with what is on
+    # disk. Rather than telling the user to restart the server, give them the
+    # one action that fixes it.
+    if st.button("Reload index"):
+        st.cache_resource.clear()
+        st.rerun()
+
 question = st.text_input(
     "Ask a question about the filing",
     placeholder="What were Apple's total net sales for the quarter?",
@@ -84,11 +97,17 @@ if question:
     try:
         with st.spinner("Retrieving and generating…"):
             answer = _chain().ask(question)
-    except RuntimeError as exc:
-        # WHY handle this specific case in the UI: an empty index is the single
-        # most likely first-run problem, and the fix is one command. A raw
-        # traceback in the browser would not communicate that.
-        st.error(f"{exc}")
+    except Exception as exc:
+        # WHY catch broadly here and not just RuntimeError: the first version
+        # caught only our own error, so a stale Chroma handle (which raises the
+        # vendor's NotFoundError) reached the browser as a raw traceback. Any
+        # failure at this point has the same two remedies, so state them.
+        st.error(f"{type(exc).__name__}: {exc}")
+        st.caption(
+            "If the index was rebuilt while this app was running, press "
+            "**Reload index** in the sidebar. If it has never been built, run "
+            "`python -m app.cli ingest`."
+        )
         st.stop()
 
     st.markdown("### Answer")
