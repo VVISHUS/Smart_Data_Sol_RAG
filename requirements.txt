@@ -27,7 +27,17 @@ langchain-community>=0.3,<1.0
 # --- Vector store ------------------------------------------------------------
 # WHY Chroma: runs in-process with zero infrastructure. A reviewer must be able
 # to `pip install && python -m app.cli` with no Docker daemon or DB server.
-chromadb>=0.5,<2.0
+#
+# WHY THIS ONE IS PINNED EXACTLY, UNLIKE EVERYTHING ELSE HERE: the repository
+# ships a PREBUILT Chroma index (chroma_db/), and Chroma's on-disk format is
+# tied to its version. A loose range let a deployment install a different
+# version from the one that wrote the index. The failure mode is nasty: the
+# vector count still reads correctly from SQLite, so nothing looks broken, but
+# the HNSW query returns nothing and every question gets answered "the provided
+# document excerpts do not contain this information".
+#
+# Bump this only together with a rebuilt, re-committed index.
+chromadb==1.5.9
 
 # --- Image handling ----------------------------------------------------------
 Pillow>=10.0,<12.0

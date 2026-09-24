@@ -1,0 +1,7 @@
+# Chroma index and SQLite databases are binary. Without this, git may apply
+# text/CRLF normalisation to them, which silently corrupts a prebuilt index.
+# The symptom is the worst kind: counts read fine, searches return nothing.
+*.bin    binary
+*.sqlite3 binary
+*.pdf    binary
+*.png    binary

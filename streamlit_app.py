@@ -120,6 +120,25 @@ Every answer is grounded in retrieved excerpts, shown below it.
         st.cache_resource.clear()
         st.rerun()
 
+    # WHY SHOW THE RAW COUNTS: the two stores are joined by id, and when they
+    # disagree the symptom is silent. Chroma returns ids, none of them resolve
+    # to a docstore row, the context comes back empty, and the model correctly
+    # answers "the provided document excerpts do not contain this information"
+    # for every single question. That looks like a model problem and is not one.
+    #
+    # Two numbers make the difference obvious: 59/59 is healthy, 59/0 means the
+    # docstore did not load, 0/59 means the vectors did not.
+    st.divider()
+    try:
+        _store = _chain().retriever.store
+        _v, _d = _store.size, _store.docstore_size
+        (st.caption if _v == _d else st.warning)(
+            f"index: {_v} vectors / {_d} docstore rows"
+            + ("" if _v == _d else "  <- these should match")
+        )
+    except Exception as _exc:
+        st.warning(f"index unavailable: {type(_exc).__name__}: {_exc}")
+
 question = st.text_input(
     "Ask a question about the filing",
     placeholder="What were Apple's total net sales for the quarter?",
